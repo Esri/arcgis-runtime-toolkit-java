@@ -1,10 +1,16 @@
+plugins {
+  id "java-library"
+  id "idea"
+  id "eclipse"
+  id "com.google.osdetector" version "1.6.2"
+}
+
+ext {
+  platform = osdetector.os == 'osx' ? 'mac' : osdetector.os == 'windows' ? 'win' : osdetector.os
+}
+
 group "com.esri.arcgisruntime"
-version VERSION
-
-apply plugin: 'java-library'
-apply plugin: 'idea'
-apply plugin: 'eclipse'
-
+version = "100.8.0"
 archivesBaseName = "arcgis-java-toolkit"
 
 idea.module.downloadJavadoc = true
@@ -19,15 +25,70 @@ repositories {
   }
 }
 
-dependencies {
-  implementation "com.esri.arcgisruntime:arcgis-java:100.2.1"
+sourceSets {
+  main {
+    resources.srcDirs = ['src/main/java']
+  }
+  integrationTest {
+    java.srcDirs = ['src/integration-test/java']
+    compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
+    resources.srcDirs = ["src/integration-test/resources"]
+    runtimeClasspath += output + compileClasspath
+  }
 }
 
-task javadocJar(type: Jar, dependsOn: javadoc) {
-  classifier = 'javadoc'
+configurations {
+  natives
+}
+
+dependencies {
+  implementation "com.esri.arcgisruntime:arcgis-java:$version"
+  natives "com.esri.arcgisruntime:arcgis-java-jnilibs:$version"
+  natives "com.esri.arcgisruntime:arcgis-java-resources:$version"
+  implementation "org.openjfx:javafx-base:11:$platform"
+  implementation "org.openjfx:javafx-graphics:11:$platform"
+  implementation "org.openjfx:javafx-controls:11:$platform"
+  implementation "org.openjfx:javafx-fxml:11:$platform"
+  implementation "org.openjfx:javafx-web:11:$platform"
+  implementation "org.openjfx:javafx-media:11:$platform"
+
+  testImplementation("org.junit.jupiter:junit-jupiter-api:5.6.0")
+  testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.6.0")
+
+  testImplementation "org.testfx:testfx-core:4.0.15-alpha"
+  testImplementation "org.testfx:testfx-junit5:4.0.15-alpha"
+  testImplementation "org.hamcrest:hamcrest:2.1"
+}
+
+task copyNatives(type: Copy) {
+  description = "Copies the arcgis native libraries into USER_HOME/.arcgis for development."
+  group = "build"
+  configurations.natives.asFileTree.each {
+    from(zipTree(it))
+  }
+  into "${System.properties.getProperty("user.home")}/.arcgis/$version"
+}
+
+task integrationTest(type: Test) {
+  description = 'Runs the integration tests.'
+  group = 'verification'
+  testClassesDirs = sourceSets.integrationTest.output.classesDirs
+  classpath = sourceSets.integrationTest.runtimeClasspath
+}
+
+tasks.withType(Test.class) {
+  dependsOn copyNatives
+  useJUnitPlatform()
+}
+
+task javadocJar(type: Jar) {
+  dependsOn javadoc
+  description = "Creates a javadoc jar."
+  group = "Documentation"
+  archiveClassifier.set('javadoc')
   from javadoc.destinationDir
 }
 
-task wrapper(type: Wrapper) {
-  gradleVersion = '4.4'
+wrapper {
+  gradleVersion = '5.6'
 }
